@@ -1,0 +1,49 @@
+name: "+ Update khulnasoft user list"
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 0 * * *" # daily
+
+jobs:
+  update-list:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.3
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version: 1.21.0
+
+      - id: generate_token
+        uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92 # v1.8.0
+        with:
+          app_id: ${{secrets.APP_ID_KHULNASOFTPROJ_KHULNASOFT}}
+          private_key: ${{secrets.APP_PRIVATE_KEY_KHULNASOFTPROJ_KHULNASOFT}}
+
+      - uses: khulnasoftproj/khulnasoft-installer@36dc5833b04eb63f06e3bb818aa6b7a6e6db99a9 # v2.1.2
+        # Install ghcp
+        with:
+          khulnasoft_version: v2.10.1
+        env:
+          KHULNASOFT_GITHUB_TOKEN: ${{github.token}}
+      - run: ghcp -v
+        env:
+          GITHUB_TOKEN: ${{github.token}}
+
+      - run: go run ./cmd/list-khulnasoft-users | tee docs/LIST.md
+        env:
+          GITHUB_TOKEN: ${{github.token}}
+      - run: cat docs/HEADER.md docs/LIST.md docs/FOOTER.md > README.md
+      - id: create-branch
+        run: |
+          branch=update-list-$(date +%Y%m%d%H%M%S)
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          ghcp commit -r "$GITHUB_REPOSITORY" -m "docs: update the user list" -b "$branch" README.md docs/LIST.md
+        env:
+          GITHUB_TOKEN: ${{steps.generate_token.outputs.token}}
+      - run: |
+          body="This pull request is created by [GitHub Actions]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+          gh pr create -t "docs: update the user list" -H "$BRANCH" -b "$body"
+        env:
+          BRANCH: ${{steps.create-branch.outputs.branch}}
+          GITHUB_TOKEN: ${{steps.generate_token.outputs.token}}
